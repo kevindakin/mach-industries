@@ -126,9 +126,12 @@ function renderJobs(jobs) {
         if (el) el.textContent = text || "";
       };
 
-      const setLink = (url) => {
+      const setLink = (url, title) => {
         const el = cardClone.querySelector('[data-roles="link"]');
-        if (el) el.href = url;
+        if (el) {
+          el.href = url;
+          el.setAttribute("aria-label", `View ${title}`);
+        }
       };
 
       const locationsText = job.locations.join(" | ");
@@ -141,7 +144,7 @@ function renderJobs(jobs) {
       setData("location", locationsText);
       setData("employment", employmentTypeFormatted);
       setData("total-compensation", totalComp);
-      setLink(job.jobUrl);
+      setLink(job.jobUrl, job.title);
 
       cardClone.setAttribute("data-filter", "card");
       cardClone.setAttribute(
