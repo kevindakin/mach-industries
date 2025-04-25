@@ -55,7 +55,7 @@ function numberText() {
           });
         },
         {
-          rootMargin: "500px 0px",
+          rootMargin: "1000px 0px",
           threshold: 0.1,
         }
       );
