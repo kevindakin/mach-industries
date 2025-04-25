@@ -372,10 +372,23 @@ function anchorLinks() {
 
 function newsCardHover() {
   const cards = document.querySelectorAll(".news-card_wrap");
+  const splits = [];
+
+  function setupUnderlines(heading) {
+    const lines = heading.querySelectorAll(".line");
+    lines.forEach((line) => {
+      // Avoid duplicate underlines if re-splitting
+      if (!line.querySelector(".news-card_underline")) {
+        const underline = document.createElement("div");
+        underline.classList.add("news-card_underline");
+        line.appendChild(underline);
+        gsap.set(underline, { scaleX: 0, transformOrigin: "left center" });
+      }
+    });
+  }
 
   cards.forEach((card) => {
     const heading = card.querySelector(".news-card_title");
-
     if (!heading) return;
 
     const split = new SplitType(heading, {
@@ -383,22 +396,15 @@ function newsCardHover() {
       tagName: "span",
     });
 
-    const lines = heading.querySelectorAll(".line");
+    splits.push({ split, heading });
 
-    lines.forEach((line) => {
-      const underline = document.createElement("div");
-      underline.classList.add("news-card_underline");
-      line.appendChild(underline);
-
-      gsap.set(underline, { scaleX: 0, transformOrigin: "left center" });
-    });
+    setupUnderlines(heading);
 
     card.addEventListener("mouseenter", () => {
+      const lines = heading.querySelectorAll(".line");
       lines.forEach((line, i) => {
         const underline = line.querySelector(".news-card_underline");
-
         gsap.set(underline, { transformOrigin: "left center" });
-
         gsap.to(underline, {
           scaleX: 1,
           duration: durationBase,
@@ -409,11 +415,10 @@ function newsCardHover() {
     });
 
     card.addEventListener("mouseleave", () => {
+      const lines = heading.querySelectorAll(".line");
       lines.forEach((line, i) => {
         const underline = line.querySelector(".news-card_underline");
-
         gsap.set(underline, { transformOrigin: "right center" });
-
         gsap.to(underline, {
           scaleX: 0,
           duration: durationBase,
@@ -423,6 +428,27 @@ function newsCardHover() {
       });
     });
   });
+
+  const handleResize = debounce(() => {
+    splits.forEach(({ split, heading }) => {
+      split.split();
+      setupUnderlines(heading);
+    });
+  });
+
+  const resizeObserver = new ResizeObserver(handleResize);
+  cards.forEach((card) => {
+    const heading = card.querySelector(".news-card_title");
+    if (heading) resizeObserver.observe(heading);
+  });
+}
+
+function debounce(func, delay) {
+  let timer;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => func.apply(this, args), delay);
+  };
 }
 
 function footerLinkHover() {
