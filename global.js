@@ -717,7 +717,7 @@ function imageReveal() {
     const overlay = item.querySelectorAll(".image-grid_overlay");
 
     gsap.set(overlay, { height: "100%" });
-    gsap.set(image, { scale: 1.3, filter: "blur(6px)" });
+    gsap.set(image, { filter: "blur(6px)" });
 
     let tl = gsap.timeline({
       scrollTrigger: {
@@ -736,7 +736,6 @@ function imageReveal() {
     }).to(
       image,
       {
-        scale: 1,
         filter: "blur(0px)",
       },
       "<0.2"
