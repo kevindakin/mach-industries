@@ -17,6 +17,9 @@ function isMenuOpen() {
 }
 
 function navScroll() {
+  const isBlog = document.querySelector('[data-nav="disable"]');
+  if (isBlog) return;
+
   const navComponent = document.querySelector(".nav_component");
   const navBorder = document.querySelector(".nav_border");
 
@@ -370,26 +373,28 @@ function anchorLinks() {
   });
 }
 
-function newsCardHover() {
-  const cards = document.querySelectorAll(".news-card_wrap");
+function cardHover() {
+  const cards = document.querySelectorAll('[data-card="wrap"]');
   const splits = [];
 
   function setupUnderlines(heading) {
     const lines = heading.querySelectorAll(".line");
     lines.forEach((line) => {
-      // Avoid duplicate underlines if re-splitting
-      if (!line.querySelector(".news-card_underline")) {
+      if (!line.querySelector(".card_underline")) {
         const underline = document.createElement("div");
-        underline.classList.add("news-card_underline");
+        underline.classList.add("card_underline");
         line.appendChild(underline);
         gsap.set(underline, { scaleX: 0, transformOrigin: "left center" });
       }
     });
   }
 
-  cards.forEach((card) => {
-    const heading = card.querySelector(".news-card_title");
+  function initCard(card) {
+    const heading = card.querySelector('[data-card="title"]');
     if (!heading) return;
+
+    if (card.dataset.cardInitialized === "true") return;
+    card.dataset.cardInitialized = "true";
 
     const split = new SplitType(heading, {
       types: "lines",
@@ -403,7 +408,7 @@ function newsCardHover() {
     card.addEventListener("mouseenter", () => {
       const lines = heading.querySelectorAll(".line");
       lines.forEach((line, i) => {
-        const underline = line.querySelector(".news-card_underline");
+        const underline = line.querySelector(".card_underline");
         gsap.set(underline, { transformOrigin: "left center" });
         gsap.to(underline, {
           scaleX: 1,
@@ -417,7 +422,7 @@ function newsCardHover() {
     card.addEventListener("mouseleave", () => {
       const lines = heading.querySelectorAll(".line");
       lines.forEach((line, i) => {
-        const underline = line.querySelector(".news-card_underline");
+        const underline = line.querySelector(".card_underline");
         gsap.set(underline, { transformOrigin: "right center" });
         gsap.to(underline, {
           scaleX: 0,
@@ -427,7 +432,34 @@ function newsCardHover() {
         });
       });
     });
-  });
+  }
+
+  cards.forEach(initCard);
+
+  const listContainer = document.querySelector('[fs-list-element="list"]');
+  if (listContainer) {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === 1) {
+            // Element node
+            if (node.matches('[data-card="wrap"]')) {
+              initCard(node);
+            } else {
+              // Check if added node contains cards
+              const nestedCards = node.querySelectorAll('[data-card="wrap"]');
+              nestedCards.forEach(initCard);
+            }
+          }
+        });
+      });
+    });
+
+    observer.observe(listContainer, {
+      childList: true,
+      subtree: true,
+    });
+  }
 
   const handleResize = debounce(() => {
     splits.forEach(({ split, heading }) => {
@@ -438,7 +470,7 @@ function newsCardHover() {
 
   const resizeObserver = new ResizeObserver(handleResize);
   cards.forEach((card) => {
-    const heading = card.querySelector(".news-card_title");
+    const heading = card.querySelector('[data-card="title"]');
     if (heading) resizeObserver.observe(heading);
   });
 }
@@ -717,7 +749,7 @@ function imageReveal() {
     const overlay = item.querySelectorAll(".image-grid_overlay");
 
     gsap.set(overlay, { height: "100%" });
-    gsap.set(image, { filter: "blur(6px)" });
+    gsap.set(image, { scale: 1.3, filter: "blur(6px)" });
 
     let tl = gsap.timeline({
       scrollTrigger: {
@@ -736,6 +768,7 @@ function imageReveal() {
     }).to(
       image,
       {
+        scale: 1,
         filter: "blur(0px)",
       },
       "<0.2"
@@ -795,6 +828,6 @@ if (window.matchMedia("(min-width: 992px)").matches) {
   menuLinkHover();
   staggerHover();
   anchorLinkHover();
-  newsCardHover();
+  cardHover();
   footerLinkHover();
 }
