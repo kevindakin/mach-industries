@@ -798,7 +798,8 @@ function textReveal() {
       duration: durationSlow,
       scrollTrigger: {
         trigger: heading,
-        start: "top 92%",
+        start: "top 96%",
+        end: "top 30%",
         toggleActions: "play none none reverse",
         scrub: 2,
       },
