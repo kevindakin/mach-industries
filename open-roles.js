@@ -1,3 +1,5 @@
+const API_URL = "https://mach-ashby-jobs.misty-meadow-faf8.workers.dev";
+
 let allJobs = [];
 let listTemplate;
 
@@ -164,35 +166,82 @@ function renderJobs(jobs) {
     emptyState.classList.toggle("is-visible", jobs.length === 0);
   }
 
-  fadeUp();
+  if (typeof fadeUp === "function") fadeUp();
   if (window.ScrollTrigger) ScrollTrigger.refresh();
   if (window.matchMedia("(min-width: 992px)").matches) {
     roleCardHover();
   }
 }
 
+function showErrorState() {
+  const emptyState = document.querySelector('[data-filter="empty"]');
+  if (emptyState) emptyState.classList.add("is-visible");
+}
+
+// Lightweight skeleton shown while jobs load, so the page doesn't look
+// empty/broken during the fetch. Inline styles keep it independent of
+// the Webflow classes. renderJobs() clears it via mainWrap.innerHTML = "".
+function showLoadingState(mainWrap, count = 6) {
+  const skeletons = Array.from({ length: count })
+    .map(
+      () => `
+      <div style="height:64px;border-radius:8px;margin-bottom:12px;
+        background:linear-gradient(90deg,
+          rgba(255,255,255,0.04) 25%,
+          rgba(255,255,255,0.09) 37%,
+          rgba(255,255,255,0.04) 63%);
+        background-size:400% 100%;
+        animation:ashbyShimmer 1.4s ease infinite;"></div>`
+    )
+    .join("");
+
+  mainWrap.innerHTML = `
+    <style>
+      @keyframes ashbyShimmer {
+        0% { background-position: 100% 50%; }
+        100% { background-position: 0 50%; }
+      }
+    </style>
+    ${skeletons}`;
+}
+
 function openRoles() {
-  const API_URL =
-    "https://api.ashbyhq.com/posting-api/job-board/mach?includeCompensation=true";
-  const API_KEY =
-    "33248effcd0309d7edf86256bde7256e5bca0c5ef409afa1b89c1830ee6e0ba6";
-
-  const headers = {
-    Authorization: `Bearer ${API_KEY}`,
-    "Content-Type": "application/json",
-  };
-
   const mainWrap = document.querySelector('[data-roles="wrap"]');
   const rawTemplate = mainWrap?.querySelector('[data-roles="list"]');
-  if (rawTemplate) {
-    listTemplate = rawTemplate.cloneNode(true);
-    rawTemplate.remove();
+
+  // If the markup hooks are missing, nothing can render — surface it
+  // instead of failing silently (common after a Webflow class rename).
+  if (!mainWrap) {
+    console.error('[Ashby] Missing [data-roles="wrap"] container.');
+    return;
+  }
+  if (!rawTemplate) {
+    console.error('[Ashby] Missing [data-roles="list"] template inside wrap.');
+    return;
   }
 
-  fetch(API_URL, { headers })
-    .then((res) => res.json())
+  listTemplate = rawTemplate.cloneNode(true);
+  rawTemplate.remove();
+
+  // Show skeleton immediately, before the network request starts.
+  showLoadingState(mainWrap);
+
+  fetch(API_URL)
+    .then((res) => {
+      if (!res.ok) {
+        throw new Error(`Ashby API returned ${res.status} ${res.statusText}`);
+      }
+      return res.json();
+    })
     .then((data) => {
-      const jobs = data.jobs || [];
+      // Per Ashby docs: isListed === false means "available via direct link
+      // only" — those roles should NOT appear in the public list. Missing/
+      // undefined isListed is treated as listed (safe default).
+      const jobs = (data.jobs || []).filter((job) => job.isListed !== false);
+
+      // Remove this line once you've confirmed it's working in prod
+      console.info(`[Ashby] Loaded ${jobs.length} listed jobs.`);
+
       const departmentsSet = new Set();
       const locationsSet = new Set();
 
@@ -244,24 +293,34 @@ function openRoles() {
       const resetBtn = document.querySelector('[data-filter="reset"]');
       if (resetBtn) {
         resetBtn.addEventListener("click", () => {
-          document.querySelector('[data-filter="search-input"]').value = "";
-          document.querySelector('[data-filter="department-select"]').value =
-            "";
-          document.querySelector('[data-filter="location-select"]').value = "";
+          const search = document.querySelector('[data-filter="search-input"]');
+          const dept = document.querySelector(
+            '[data-filter="department-select"]'
+          );
+          const loc = document.querySelector('[data-filter="location-select"]');
+          if (search) search.value = "";
+          if (dept) dept.value = "";
+          if (loc) loc.value = "";
           resetBtn.classList.remove("is-visible");
           renderJobs(allJobs);
         });
-
-        // Prevent Webflow filter form from submitting
-        const filterForm = document.querySelector('[data-filter="form"]');
-        if (filterForm) {
-          filterForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-          });
-        }
       }
+
+      // Prevent the Webflow filter form from submitting/reloading
+      const filterForm = document.querySelector('[data-filter="form"]');
+      if (filterForm) {
+        filterForm.addEventListener("submit", (e) => {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        });
+      }
+    })
+    .catch((err) => {
+      console.error("[Ashby] Failed to load jobs:", err);
+      showErrorState();
     });
 }
 
-openRoles();
+document.addEventListener("DOMContentLoaded", () => {
+  openRoles();
+});
