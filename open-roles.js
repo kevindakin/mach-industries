@@ -1,5 +1,9 @@
 const API_URL = "https://mach-ashby-jobs.misty-meadow-faf8.workers.dev";
 
+const TEAM_SELECT_SEL = '[data-filter="team-select"]';
+const TEAM_SUBHEAD_SEL = '[data-roles="team"]';
+const TEAM_WRAPPER_SEL = ".form_field-block";
+
 let allJobs = [];
 let listTemplate;
 
@@ -56,6 +60,51 @@ function parseLocations(rawLocations) {
     .filter(Boolean);
 }
 
+// Return the distinct, non-empty team names for jobs in a given department.
+function teamsForDepartment(department) {
+  const set = new Set();
+  allJobs.forEach((job) => {
+    if (job.department === department && job.team) set.add(job.team);
+  });
+  return Array.from(set);
+}
+
+// Show/hide + (re)populate the team dropdown based on the selected
+// department. The dropdown only appears once a specific department is
+// chosen, and lists only that department's teams (the dependent behavior
+// the client asked for). Hidden + cleared when no department is selected.
+function syncTeamSelect(selectedDeptValue) {
+  const teamSelect = document.querySelector(TEAM_SELECT_SEL);
+  if (!teamSelect) {
+    console.warn(`[Ashby] Team select ${TEAM_SELECT_SEL} not found.`);
+    return;
+  }
+
+  // The wrapper (.form_field-block) is what CSS hides via :has(). Show/hide
+  // that, not the select. Clearing inline display lets the CSS rule hide it;
+  // setting "flex" overrides the CSS to show it.
+  const wrapper = teamSelect.closest(TEAM_WRAPPER_SEL);
+
+  const hide = () => {
+    teamSelect.value = "";
+    if (wrapper) wrapper.style.display = "";
+  };
+
+  if (!selectedDeptValue) {
+    hide();
+    return;
+  }
+
+  const teams = teamsForDepartment(selectedDeptValue);
+  if (teams.length === 0) {
+    hide();
+    return;
+  }
+
+  populateSelect(TEAM_SELECT_SEL, teams, "All Teams");
+  if (wrapper) wrapper.style.display = "flex";
+}
+
 function applyFilters() {
   const normalize = (str) => (str || "").trim().toLowerCase();
 
@@ -64,26 +113,33 @@ function applyFilters() {
     '[data-filter="department-select"]'
   );
   const locSelect = document.querySelector('[data-filter="location-select"]');
+  const teamSelect = document.querySelector(TEAM_SELECT_SEL);
   const resetEl = document.querySelector('[data-filter="reset"]');
 
   const searchTerm = normalize(searchInput?.value);
   const selectedDept = normalize(deptSelect?.value);
   const selectedLoc = normalize(locSelect?.value);
+  // Team only applies when a department is selected (the dropdown is
+  // hidden otherwise). If hidden/empty, selectedTeam is "" and ignored.
+  const selectedTeam = normalize(teamSelect?.value);
 
   const filtered = allJobs.filter((job) => {
     const jobTitle = normalize(job.title);
     const jobDept = normalize(job.department);
+    const jobTeam = normalize(job.team);
     const jobLocs = job.locations.map(normalize);
 
     const matchesSearch = !searchTerm || jobTitle.includes(searchTerm);
     const matchesDept = !selectedDept || jobDept === selectedDept;
     const matchesLoc = !selectedLoc || jobLocs.includes(selectedLoc);
+    const matchesTeam = !selectedTeam || jobTeam === selectedTeam;
 
-    return matchesSearch && matchesDept && matchesLoc;
+    return matchesSearch && matchesDept && matchesLoc && matchesTeam;
   });
 
   // Show reset button if any filters are active
-  const hasActiveFilters = searchTerm || selectedDept || selectedLoc;
+  const hasActiveFilters =
+    searchTerm || selectedDept || selectedLoc || selectedTeam;
   if (resetEl) {
     resetEl.classList.toggle("is-visible", hasActiveFilters);
   }
@@ -107,20 +163,36 @@ function renderJobs(jobs) {
   const sortedDepts = Object.keys(jobsByDept).sort();
 
   sortedDepts.forEach((department) => {
-    const deptJobs = jobsByDept[department].sort((a, b) =>
-      a.title.localeCompare(b.title)
-    );
+    const deptJobs = jobsByDept[department];
 
     const listClone = listTemplate.cloneNode(true);
     const deptTitle = listClone.querySelector('[data-roles="department"]');
     const cardRef = listClone.querySelector('[data-roles="card"]');
+    const teamRef = listClone.querySelector(TEAM_SUBHEAD_SEL);
     const layout = listClone.querySelector('[data-roles="layout"]');
 
     if (deptTitle) deptTitle.textContent = department;
+    // Pull the reference nodes out of the template before we clone them.
     if (cardRef) cardRef.remove();
+    if (teamRef) teamRef.remove();
     if (!layout) return;
 
-    deptJobs.forEach((job) => {
+    // Group this department's jobs by team. Teamless jobs go under "".
+    const jobsByTeam = deptJobs.reduce((acc, job) => {
+      const team = job.team || "";
+      if (!acc[team]) acc[team] = [];
+      acc[team].push(job);
+      return acc;
+    }, {});
+
+    // Render teamless jobs first (no subhead), then named teams A–Z.
+    const teamKeys = Object.keys(jobsByTeam).sort((a, b) => {
+      if (a === "") return -1;
+      if (b === "") return 1;
+      return a.localeCompare(b);
+    });
+
+    const renderCard = (job) => {
       const cardClone = cardRef.cloneNode(true);
 
       const setData = (role, text) => {
@@ -153,9 +225,23 @@ function renderJobs(jobs) {
         "data-filter-department",
         job.department || "Uncategorized"
       );
+      cardClone.setAttribute("data-filter-team", job.team || "");
       cardClone.setAttribute("data-filter-location", job.locations.join(","));
 
       layout.appendChild(cardClone);
+    };
+
+    teamKeys.forEach((team) => {
+      // Insert a team subhead before the team's cards (skip for teamless).
+      if (team && teamRef) {
+        const teamClone = teamRef.cloneNode(true);
+        teamClone.textContent = team;
+        layout.appendChild(teamClone);
+      }
+
+      jobsByTeam[team]
+        .sort((a, b) => a.title.localeCompare(b.title))
+        .forEach(renderCard);
     });
 
     mainWrap.appendChild(listClone);
@@ -258,6 +344,7 @@ function openRoles() {
         return {
           title: job.title,
           department: job.department || "Uncategorized",
+          team: job.team || "",
           locations: locationsArr,
           employmentType: job.employmentType || "",
           compensation: job?.compensation?.compensationTierSummary || "",
@@ -278,15 +365,28 @@ function openRoles() {
 
       renderJobs(allJobs);
 
+      // Team dropdown starts hidden until a department is chosen.
+      syncTeamSelect("");
+
       const debouncedFilter = debounce(applyFilters, 200);
       document
         .querySelector('[data-filter="search-input"]')
         ?.addEventListener("input", debouncedFilter);
+
+      // Department change: repopulate + show/hide the team dropdown for
+      // the chosen department, then re-filter.
       document
         .querySelector('[data-filter="department-select"]')
-        ?.addEventListener("change", applyFilters);
+        ?.addEventListener("change", (e) => {
+          syncTeamSelect(e.target.value);
+          applyFilters();
+        });
+
       document
         .querySelector('[data-filter="location-select"]')
+        ?.addEventListener("change", applyFilters);
+      document
+        .querySelector(TEAM_SELECT_SEL)
         ?.addEventListener("change", applyFilters);
 
       // Reset button click handler
@@ -301,6 +401,8 @@ function openRoles() {
           if (search) search.value = "";
           if (dept) dept.value = "";
           if (loc) loc.value = "";
+          // Clear + hide the team dropdown (no department selected now).
+          syncTeamSelect("");
           resetBtn.classList.remove("is-visible");
           renderJobs(allJobs);
         });
