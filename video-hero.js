@@ -38,6 +38,8 @@ function heroVideo() {
           fullscreenButton: false,
           volumeControl: false,
           playbackRateControl: false,
+          doNotTrack: true,
+          seo: false
         },
       });
     }

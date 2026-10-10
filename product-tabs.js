@@ -11,6 +11,7 @@ const WISTIA_OPTIONS = {
   bigPlayButton: false,
   playPauseNotifier: false,
   doNotTrack: true,
+  seo: false
 };
 
 const FADE_DURATION = 0.8; // match durationSlow in global.js

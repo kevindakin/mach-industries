@@ -13,6 +13,7 @@ function visualVideo() {
       volumeControl: false,
       playbackRateControl: false,
       doNotTrack: true,
+      seo: false,
     };
   
     function mountVideo(el) {
