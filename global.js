@@ -79,15 +79,14 @@ function navOpen() {
   const lineTop = hamburger.querySelector(".is-top");
   const lineBottom = hamburger.querySelector(".is-bottom");
   const menu = document.querySelector(".nav_menu");
-  const menuWrap = menu.querySelector(".menu_wrap");
-  const items = menu.querySelectorAll(".menu-link_wrap");
+  const items = menu.querySelectorAll('[data-nav="item"]');
   const overlay = document.querySelector(".nav_overlay");
   let menuOpen = false;
+  let menuAnim = null;
 
   hamburger.setAttribute("aria-expanded", "false");
   hamburger.setAttribute("aria-controls", "navigation-menu");
   menu.setAttribute("id", "navigation-menu");
-  menu.setAttribute("role", "menu");
   menu.setAttribute("aria-hidden", "true");
 
   gsap.set(menu, { x: "100%" });
@@ -105,37 +104,31 @@ function navOpen() {
   };
 
   const trapFocus = (e) => {
-    if (menuOpen) {
-      if (e.key === "Tab") {
-        if (e.shiftKey && document.activeElement === firstFocusableElement) {
-          e.preventDefault();
-          lastFocusableElement.focus();
-        } else if (
-          !e.shiftKey &&
-          document.activeElement === lastFocusableElement
-        ) {
-          e.preventDefault();
-          firstFocusableElement.focus();
-        }
-      }
+    if (!menuOpen) return;
 
-      if (e.key === "Escape") {
-        closeMenu();
-        hamburger.focus();
+    if (e.key === "Tab") {
+      if (e.shiftKey && document.activeElement === firstFocusableElement) {
+        e.preventDefault();
+        lastFocusableElement.focus();
+      } else if (!e.shiftKey && document.activeElement === lastFocusableElement) {
+        e.preventDefault();
+        firstFocusableElement.focus();
       }
+    }
+
+    if (e.key === "Escape") {
+      closeMenu();
+      hamburger.focus();
     }
   };
 
-  const menuAnim = gsap.timeline({
-    paused: true,
-    defaults: {
-      duration: 0.6,
-      ease: "power2.out",
-    },
-  });
-
   const openMenu = () => {
     updateFocusableElements();
+
+    if (menuAnim) menuAnim.kill();
+    menuAnim = gsap.timeline({
+      defaults: { duration: 0.6, ease: "power2.out" },
+    });
 
     menuAnim
       .set(menu, { display: "flex" })
@@ -143,17 +136,18 @@ function navOpen() {
       .to(menu, { x: "0%" }, "<")
       .to(lineTop, { y: 6, rotate: -45, duration: durationFast }, "<")
       .to(lineBottom, { y: -6, rotate: 45, duration: durationFast }, "<")
-      .from(
+      .fromTo(
         items,
+        { filter: "blur(4px)", y: "3rem", opacity: 0 },
         {
-          filter: "blur(4px)",
-          y: "3rem",
-          opacity: 0,
+          filter: "blur(0px)",
+          y: "0rem",
+          opacity: 1,
           stagger: 0.15,
+          clearProps: "opacity,filter,transform",
         },
         "<0.4"
-      )
-      .play();
+      );
 
     menuOpen = true;
     hamburger.setAttribute("aria-expanded", "true");
@@ -161,19 +155,21 @@ function navOpen() {
 
     document.addEventListener("keydown", trapFocus);
 
-    if (firstFocusableElement) {
-      firstFocusableElement.focus();
-    }
+    if (firstFocusableElement) firstFocusableElement.focus();
   };
 
   const closeMenu = () => {
+    if (menuAnim) menuAnim.kill();
+    menuAnim = gsap.timeline({
+      defaults: { duration: 0.6, ease: "power2.out" },
+    });
+
     menuAnim
       .to(menu, { x: "100%" })
       .to(lineTop, { y: 0, rotate: 0, duration: durationFast }, "<")
       .to(lineBottom, { y: 0, rotate: 0, duration: durationFast }, "<")
       .set(menu, { display: "none" })
-      .set(overlay, { display: "none" })
-      .play();
+      .set(overlay, { display: "none" });
 
     menuOpen = false;
     hamburger.setAttribute("aria-expanded", "false");
@@ -181,10 +177,6 @@ function navOpen() {
 
     document.removeEventListener("keydown", trapFocus);
   };
-
-  items.forEach((item) => {
-    item.setAttribute("role", "menuitem");
-  });
 
   hamburger.addEventListener("click", () => {
     if (menuOpen) {
@@ -194,8 +186,97 @@ function navOpen() {
     }
   });
 
-  overlay.addEventListener("click", () => {
-    closeMenu();
+  overlay.addEventListener("click", closeMenu);
+}
+
+function navAccordion() {
+  const menu = document.querySelector(".nav_menu");
+  if (!menu || menu.dataset.accordionInitialized) return;
+  menu.dataset.accordionInitialized = "true";
+
+  // Only wraps with a links container (skips Careers)
+  const items = Array.from(menu.querySelectorAll(".dropdown_menu_wrap")).filter(
+    (item) => item.querySelector(".dropdown_menu_layout")
+  );
+
+  if (!items.length) return;
+
+  const getParts = (item) => {
+    const icon = item.querySelector(".dropdown_menu_icon");
+    return {
+      trigger: item.querySelector(".dropdown_menu_trigger"),
+      content: item.querySelector(".dropdown_menu_layout"),
+      icon,
+      iconVertical: icon?.querySelector("rect:nth-of-type(2)"),
+    };
+  };
+
+  const toggle = (item, open) => {
+    const { trigger, content, icon, iconVertical } = getParts(item);
+
+    item.classList.toggle("is-open", open);
+    trigger.setAttribute("aria-expanded", open);
+
+    // Prevents a close tween's onComplete from hiding an item reopened mid-animation
+    gsap.killTweensOf([content, icon, iconVertical]);
+
+    if (open) gsap.set(content, { clearProps: "display" });
+
+    gsap.to(content, {
+      height: open ? "auto" : 0,
+      duration: durationFast,
+      ease: easeBase,
+      onComplete: () => {
+        if (!open) gsap.set(content, { display: "none" });
+      },
+    });
+
+    // Plus to minus: spin 180 and fade out the vertical bar
+    if (icon) {
+      gsap.to(icon, { rotate: open ? 180 : 0, duration: durationFast, ease: easeBase });
+    }
+    if (iconVertical) {
+      gsap.to(iconVertical, { opacity: open ? 0 : 1, duration: durationFast, ease: easeBase });
+    }
+  };
+
+  // Initial state: all closed
+  items.forEach((item, i) => {
+    const { trigger, content } = getParts(item);
+
+    content.id = content.id || `nav-dropdown-${i + 1}`;
+    trigger.setAttribute("role", "button");
+    trigger.setAttribute("tabindex", "0");
+    trigger.setAttribute("aria-controls", content.id);
+    trigger.setAttribute("aria-expanded", "false");
+
+    gsap.set(content, { height: 0, display: "none" });
+    item.classList.remove("is-open");
+  });
+
+  // Handlers
+  items.forEach((item) => {
+    const { trigger } = getParts(item);
+
+    const handle = () => {
+      const willOpen = !item.classList.contains("is-open");
+
+      items.forEach((other) => {
+        if (other !== item && other.classList.contains("is-open")) {
+          toggle(other, false);
+        }
+      });
+
+      toggle(item, willOpen);
+    };
+
+    trigger.addEventListener("click", handle);
+    trigger.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        handle();
+      }
+    });
   });
 }
 
@@ -483,11 +564,12 @@ function debounce(func, delay) {
   };
 }
 
-function footerLinkHover() {
-  const links = document.querySelectorAll(".footer-link_wrap");
+function lineHover(wrapSelector, lineSelector) {
+  const links = document.querySelectorAll(wrapSelector);
 
   links.forEach((link) => {
-    const line = link.querySelector(".footer-link_line");
+    const line = link.querySelector(lineSelector);
+    if (!line) return;
 
     gsap.set(line, { scaleX: 0, transformOrigin: "left center" });
 
@@ -495,9 +577,7 @@ function footerLinkHover() {
       link.classList.add("is-hovered");
 
       links.forEach((otherLink) => {
-        if (otherLink !== link) {
-          otherLink.classList.add("is-dimmed");
-        }
+        if (otherLink !== link) otherLink.classList.add("is-dimmed");
       });
 
       gsap.set(line, { transformOrigin: "left center" });
@@ -511,9 +591,7 @@ function footerLinkHover() {
     link.addEventListener("mouseleave", () => {
       link.classList.remove("is-hovered");
 
-      links.forEach((otherLink) => {
-        otherLink.classList.remove("is-dimmed");
-      });
+      links.forEach((otherLink) => otherLink.classList.remove("is-dimmed"));
 
       gsap.set(line, { transformOrigin: "right center" });
       gsap.to(line, {
@@ -814,6 +892,7 @@ function textReveal() {
 isMenuOpen();
 navScroll();
 navOpen();
+navAccordion();
 copyright();
 externalLinks();
 anchorLinks();
@@ -830,5 +909,6 @@ if (window.matchMedia("(min-width: 992px)").matches) {
   staggerHover();
   anchorLinkHover();
   cardHover();
-  footerLinkHover();
+  lineHover(".footer-link_wrap", ".footer-link_line");
+  lineHover(".tab_product_wrap", ".tab_product_line");
 }
