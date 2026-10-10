@@ -1,74 +1,32 @@
-function footerReveal() {
-  const footer = document.querySelector(".footer_fixed_wrap");
-  if (!footer) return;
-
-  const gradients = footer.querySelectorAll('[id^="logo-gradient-"]');
-  const gradientsIn = { x1: "0%", y1: "0%", x2: "100%", y2: "100%" };
+function logoReveal() {
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const gradientsIn = { x1: "0%", y1: "0%", x2: "100%", y2: "100%" };
 
-  let ctx;
+  document.querySelectorAll(".logo-reveal_wrap").forEach((wrapper) => {
+    const svg = wrapper.querySelector(".logo-reveal_svg");
+    if (!svg) return;
 
-  const build = () => {
-    if (ctx) ctx.revert();
+    const gradients = svg.querySelectorAll('[id^="logo-gradient-"]');
 
-    // Static mode must be applied before measuring the trigger start.
-    const fits = footer.offsetHeight <= window.innerHeight;
-    footer.classList.toggle("is-static", !fits);
+    if (reduced) {
+      gsap.set(gradients, { attr: gradientsIn });
+      return;
+    }
 
-    ctx = gsap.context(() => {
-      if (reduced) {
-        gsap.set(gradients, { attr: gradientsIn });
-        return;
-      }
+    gsap.set(gradients, {
+      attr: { x1: "-1000%", y1: "-1000%", x2: "100%", y2: "100%" },
+    });
 
-      gsap.set(gradients, {
-        attr: { x1: "-1000%", y1: "-1000%", x2: "100%", y2: "100%" },
-      });
-
-      const tl = gsap.timeline({
-        paused: true,
+    gsap
+      .timeline({
+        scrollTrigger: {
+          trigger: svg,
+          start: "top 85%",
+          toggleActions: "play none none reverse",
+        },
         defaults: { duration: 2, ease: easeBase },
-      });
-
-      if (fits) {
-        gsap.set(footer, { opacity: 0, y: "-5%" });
-        tl.to(footer, { opacity: 1, y: "0%" }, 0);
-      }
-
-      tl.to(gradients, { attr: gradientsIn, stagger: 0.3 }, fits ? 0.1 : 0);
-
-      ScrollTrigger.create(
-        fits
-          ? {
-              start: () =>
-                ScrollTrigger.maxScroll(window) -
-                Math.min(footer.offsetHeight, window.innerHeight) * 0.8,
-              end: () => ScrollTrigger.maxScroll(window),
-              invalidateOnRefresh: true,
-              onEnter: () => tl.play(),
-              onLeaveBack: () => tl.reverse(),
-            }
-          : {
-              // Footer is in normal flow — trigger off the element itself.
-              trigger: footer.querySelector(".logo-reveal_svg"),
-              start: "top 85%",
-              invalidateOnRefresh: true,
-              onEnter: () => tl.play(),
-              onLeaveBack: () => tl.reverse(),
-            }
-      );
-    }, footer);
-  };
-
-  build();
-
-  let t;
-  window.addEventListener("resize", () => {
-    clearTimeout(t);
-    t = setTimeout(() => {
-      build();
-      ScrollTrigger.refresh();
-    }, 200);
+      })
+      .to(gradients, { attr: gradientsIn, stagger: 0.3 });
   });
 }
 
@@ -124,7 +82,7 @@ function logoHover() {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-  footerReveal();
+  logoReveal();
 
   if (window.matchMedia("(min-width: 992px)").matches) {
     logoHover();
